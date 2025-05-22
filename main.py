@@ -1,3 +1,8 @@
+#Membros Christian / Victor / Eric
+#Instruções:
+# 1. Instale as dependências necessárias: `pip install psutil prompt_toolkit`
+# 2. Execute o script: `python main.py`
+
 import subprocess
 import psutil
 import time
