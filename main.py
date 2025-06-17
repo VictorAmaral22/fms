@@ -39,7 +39,6 @@ class CreditManagerPrePago:
         with cls.lock:
             return cls.total_credits
 
-
 class FMS:
     total_cpu_used = 0
     # Usando um lock para garantir que o acesso ao total de CPU usada seja thread-safe
@@ -53,6 +52,8 @@ class FMS:
         self.process = None
         self.proc_cpu_time = 0
         self.pre_pago = pre_pago
+        self.tree_process = {}
+
 
     def get_params(self, session):
         # O método session.prompt é utilizado para coletar entradas do usuário de forma interativa
@@ -67,11 +68,35 @@ class FMS:
         # psutil.Process é utilizado para obter informações sobre o processo
         process = subprocess.Popen(command)
         self.process = psutil.Process(process.pid)
+        self.tree_process[self.process.pid] = {}
 
     def get_cpu_time(self):
         # O método cpu_times() retorna o tempo de CPU utilizado pelo processo
         cpu_times = self.process.cpu_times()
         return cpu_times.user + cpu_times.system
+
+    def get_childrens(self, process: psutil.Process):
+        # O método get_childrens() cria a arvore de processos com os filhos dos processos pai
+        try:
+            childrens = process.children(recursive=False) 
+            active_childrens = {}
+            if childrens:
+                for child in childrens:
+                    cpu_times = child.cpu_times()
+                    cpu_time = cpu_times.user + cpu_times.system
+                    ram_usage = child.memory_info().rss     
+                    active_childrens[child.pid] = {
+                        "status": child.status(),
+                        "cpu_time": cpu_time,  
+                        "ram": ram_usage / (1024 * 1024)  
+                    }
+                self.tree_process[process.pid] = active_childrens
+            else:
+                return 
+        except:
+            pass
+        
+            
 
     def get_memory_usage(self):
         # O método memory_info() retorna informações sobre o uso de memória do processo
@@ -90,6 +115,7 @@ class FMS:
                 self.proc_cpu_time = cpu_total
                 # O método memory_info() retorna informações sobre o uso de memória do processo
                 mem_rss_mb = self.get_memory_usage()
+                self.get_childrens(self.process)
 
                 if self.pre_pago:
                     # Débito direto no saldo pré-pago
@@ -133,6 +159,11 @@ class FMS:
                 f"[{self.process.pid}] T: {wall_clock:.1f}s | CPU: {cpu_total:.2f}s | "
                 f"RAM: {mem_rss_mb:.2f} MB"
             )
+            for key in self.tree_process:
+                for element in self.tree_process[key]:
+                    print(f"  ﹂[{element}] T: {wall_clock:.1f}s | CPU: {self.tree_process[key][element]['cpu_time']:.2f}s |"
+                          f" RAM: {self.tree_process[key][element]['ram']:.2f} MB"                         
+                          )
             if self.pre_pago:
                 print(f"Créditos restantes: R${CreditManagerPrePago.get_balance():.2f}")
 
